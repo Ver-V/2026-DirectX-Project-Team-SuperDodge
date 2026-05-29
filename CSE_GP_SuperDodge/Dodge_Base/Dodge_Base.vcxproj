@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{ae2730cd-0be2-44c1-80d6-ef03c317dec6}</ProjectGuid>
-    <RootNamespace>testproject</RootNamespace>
+    <ProjectGuid>{ca531fc6-44cc-4a32-aecf-78f804b0cc54}</ProjectGuid>
+    <RootNamespace>DodgeBase</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
