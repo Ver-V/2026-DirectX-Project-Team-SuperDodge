@@ -64,7 +64,7 @@ int DodgeApplication::RunMessageLoop()
         float deltaTime = std::min(elapsed.count(), 0.033f);
 
         _gameManager.Update(deltaTime);
-        _gameManager.Draw(_renderer);
+        _gameManager.Draw(_renderer, deltaTime);
         _renderer.Present();
     }
 

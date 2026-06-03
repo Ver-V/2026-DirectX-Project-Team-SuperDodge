@@ -28,11 +28,13 @@ private:
 
     bool _spaceWasDown = false;
     bool _rWasDown = false;
+    bool _xWasDown = false;
+    bool _bombFlashRequest = false;
 
 public:
     void Initialize(HWND hwnd);
     void Update(float deltaTime);
-    void Draw(Renderer& renderer);
+    void Draw(Renderer& renderer, float deltaTime);
 
     void StartGame();
     void GameOver();
@@ -40,5 +42,5 @@ public:
 
 private:
     void ResetPlayer();
-    void DrawPlayArea(Renderer& renderer);
+    void DrawUI(Renderer& renderer);
 };

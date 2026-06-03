@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include "GameObject.hpp"
+#include "../Components/ObstacleStatusComponent.hpp"
 
 class Renderer;
 
@@ -23,11 +24,25 @@ public:
         _objects.clear();
     }
 
+    void ClearActiveObstacles()
+    {
+        for (auto& obj : _objects)
+        {
+            if (obj->GetComponent<ObstacleStatusComponent>() != nullptr)
+            {
+                obj->SetActive(false);
+            }
+        }
+    }
+
+    const std::vector<std::unique_ptr<GameObject>>& GetObjects() const { return _objects; }
+
     void Start()
     {
         for (size_t i = 0; i < _objects.size(); ++i)
             _objects[i]->Start();
     }
+// ... rest of code (Update/Render)
 
     void Update(float deltaTime)
     {

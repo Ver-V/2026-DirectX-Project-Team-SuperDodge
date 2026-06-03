@@ -16,7 +16,7 @@ class PrefabFactory
 public:
     static GameObject* CreatePlayer(const GameConfig& config)
     {
-        GameObject* player = new GameObject(Vector2(ScreenWidth * 0.5f, ScreenHeight * 0.5f), config.playerSize);
+        GameObject* player = new GameObject(Vector2(PlayAreaWidth * 0.5f, PlayAreaHeight * 0.5f), config.playerSize);
 
         player->AddComponent(new RectRendererComponent(Color(0.25f, 0.75f, 1.0f)));
         player->AddComponent(new PlayerStatusComponent());

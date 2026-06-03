@@ -47,7 +47,7 @@ protected:
 
         float margin = std::max(size.x, size.y) + 80.0f;
 
-        if (position.x < -margin || position.x > ScreenWidth + margin || position.y < -margin || position.y > ScreenHeight + margin)
+        if (position.x < -margin || position.x > PlayAreaWidth + margin || position.y < -margin || position.y > PlayAreaHeight + margin)
             owner->SetActive(false);
     }
 };

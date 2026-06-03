@@ -16,6 +16,7 @@
 #include "../Game/ObjectPool.hpp"
 
 #include "AIComponent.hpp"
+#include "ObstacleStatusComponent.hpp"
 
 class ObstacleSpawnerComponent : public Component
 {
@@ -85,9 +86,9 @@ public:
 private:
     void SpawnObstacle()
     {
-        std::uniform_real_distribution<float> xDist(0.0f, static_cast<float>(ScreenWidth));
-        std::uniform_real_distribution<float> yDist(0.0f, static_cast<float>(ScreenHeight));
-        std::uniform_real_distribution<float> aimOffsetDist(-120.0f, 120.0f);
+        std::uniform_real_distribution<float> xDist(0.0f, static_cast<float>(PlayAreaWidth));
+        std::uniform_real_distribution<float> yDist(0.0f, static_cast<float>(PlayAreaHeight));
+        std::uniform_real_distribution<float> aimOffsetDist(-80.0f, 80.0f);
         std::uniform_int_distribution<int> sideDist(0, 3);
 
         ObstacleType obstacleType = PickObstacleType();
@@ -99,30 +100,32 @@ private:
 
         Vector2 spawnPosition;
 
-        if (side == 0)
+        if (side == 0) // Top
             spawnPosition = Vector2(xDist(_randomEngine), -halfSize);
-        else if (side == 1)
-            spawnPosition = Vector2(xDist(_randomEngine), ScreenHeight + halfSize);
-        else if (side == 2)
+        else if (side == 1) // Bottom
+            spawnPosition = Vector2(xDist(_randomEngine), PlayAreaHeight + halfSize);
+        else if (side == 2) // Left
             spawnPosition = Vector2(-halfSize, yDist(_randomEngine));
-        else
-            spawnPosition = Vector2(ScreenWidth + halfSize, yDist(_randomEngine));
+        else // Right
+            spawnPosition = Vector2(PlayAreaWidth + halfSize, yDist(_randomEngine));
 
         Vector2 targetPosition = _target->GetPosition();
-        targetPosition.x = ClampFloat(targetPosition.x + aimOffsetDist(_randomEngine), 0.0f, static_cast<float>(ScreenWidth));
-        targetPosition.y = ClampFloat(targetPosition.y + aimOffsetDist(_randomEngine), 0.0f, static_cast<float>(ScreenHeight));
+        targetPosition.x = ClampFloat(targetPosition.x + aimOffsetDist(_randomEngine), 0.0f, static_cast<float>(PlayAreaWidth));
+        targetPosition.y = ClampFloat(targetPosition.y + aimOffsetDist(_randomEngine), 0.0f, static_cast<float>(PlayAreaHeight));
 
         GameObject* obstacle = _objectPool.GetObject(obstacleType);
-
-        if (obstacle == nullptr)
-            return;
+        if (obstacle == nullptr) return;
 
         obstacle->SetPosition(spawnPosition);
         obstacle->SetSize(Vector2(size, size));
+
+        ObstacleStatusComponent* obstacleStatus = obstacle->GetComponent<ObstacleStatusComponent>();
+        if (obstacleStatus != nullptr)
+            obstacleStatus->ResetGraze();
+
         obstacle->SetActive(true);
 
         AIComponent* ai = obstacle->GetComponent<AIComponent>();
-
         if (ai != nullptr)
             ai->Initialize(targetPosition, _currentObstacleSpeed, _target);
     }

@@ -5,7 +5,7 @@
 class FastAIComponent : public AIComponent
 {
 private:
-    float _speedMultiplier = 1.8f;
+    float _speedMultiplier = 2.0f;
 
 public:
     void Update(float deltaTime) override

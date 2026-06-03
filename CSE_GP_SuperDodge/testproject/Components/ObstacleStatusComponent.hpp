@@ -1,15 +1,15 @@
 #pragma once
 
 #include "../Core/Component.hpp"
-#include "../Core/GameObject.hpp"
-#include "../Core/MathUtils.hpp"
-#include "PlayerStatusComponent.hpp"
+
+class GameObject;
 
 class ObstacleStatusComponent : public Component
 {
 private:
     GameObject* _target = nullptr;
     int _damage = 1;
+    bool _hasGrazed = false;
 
 public:
     ObstacleStatusComponent(GameObject* target, int damage = 1)
@@ -22,21 +22,8 @@ public:
         _target = target;
     }
 
-    void Update(float deltaTime) override
-    {
-        UNREFERENCED_PARAMETER(deltaTime);
-
-        if (owner == nullptr) return;
-        if (_target == nullptr) return;
-        if (!_target->IsActive()) return;
-
-        PlayerStatusComponent* playerStatus = _target->GetComponent<PlayerStatusComponent>();
-
-        if (playerStatus == nullptr) return;
-        if (playerStatus->IsDead()) return;
-        if (!IsOverlap(owner->GetBounds(), _target->GetBounds())) return;
-
-        playerStatus->TakeDamage(_damage);
-        owner->SetActive(false);
-    }
+    int GetDamage() const { return _damage; }
+    bool HasGrazed() const { return _hasGrazed; }
+    void MarkGrazed() { _hasGrazed = true; }
+    void ResetGraze() { _hasGrazed = false; }
 };

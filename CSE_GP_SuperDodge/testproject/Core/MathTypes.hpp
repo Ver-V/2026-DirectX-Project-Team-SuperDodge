@@ -30,6 +30,6 @@ struct Rect
 
 struct Vertex
 {
-    DirectX::XMFLOAT3 position;
+    DirectX::XMFLOAT3 pos;
     DirectX::XMFLOAT4 color;
 };
