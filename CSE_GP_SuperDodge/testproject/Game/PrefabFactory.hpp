@@ -29,42 +29,42 @@ public:
         return player;
     }
 
-    static GameObject* CreateNormalObstacle(const GameConfig& config, GameObject* target)
+    static GameObject* CreateNormalObstacle(const GameConfig& config)
     {
         const ObstacleData& data = config.normalObstacle;
 
         GameObject* obstacle = new GameObject(Vector2(-1000.0f, -1000.0f), Vector2(data.size, data.size));
 
         obstacle->AddComponent(new RectRendererComponent(data.color));
-        obstacle->AddComponent(new ObstacleStatusComponent(target));
+        obstacle->AddComponent(new ObstacleStatusComponent());
         obstacle->AddComponent(new NormalAIComponent());
         obstacle->SetActive(false);
 
         return obstacle;
     }
 
-    static GameObject* CreateFastObstacle(const GameConfig& config, GameObject* target)
+    static GameObject* CreateFastObstacle(const GameConfig& config)
     {
         const ObstacleData& data = config.fastObstacle;
 
         GameObject* obstacle = new GameObject(Vector2(-1000.0f, -1000.0f), Vector2(data.size, data.size));
 
         obstacle->AddComponent(new RectRendererComponent(data.color));
-        obstacle->AddComponent(new ObstacleStatusComponent(target));
+        obstacle->AddComponent(new ObstacleStatusComponent());
         obstacle->AddComponent(new FastAIComponent());
         obstacle->SetActive(false);
 
         return obstacle;
     }
 
-    static GameObject* CreateGuidedObstacle(const GameConfig& config, GameObject* target)
+    static GameObject* CreateGuidedObstacle(const GameConfig& config)
     {
         const ObstacleData& data = config.guidedObstacle;
 
         GameObject* obstacle = new GameObject(Vector2(-1000.0f, -1000.0f), Vector2(data.size, data.size));
 
         obstacle->AddComponent(new RectRendererComponent(data.color));
-        obstacle->AddComponent(new ObstacleStatusComponent(target));
+        obstacle->AddComponent(new ObstacleStatusComponent());
         obstacle->AddComponent(new GuidedAIComponent());
         obstacle->SetActive(false);
 

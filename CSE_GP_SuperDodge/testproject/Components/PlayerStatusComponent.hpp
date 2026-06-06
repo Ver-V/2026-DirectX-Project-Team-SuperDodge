@@ -8,7 +8,7 @@ private:
     int _hp = 1;
     int _bombCount = 3;
     bool _isDead = false;
-    float _hitboxRadius = 5.0f; // 피탄 반지름
+    float _hitboxRadius = 5.0f;
 
 public:
     void Reset(int hp)

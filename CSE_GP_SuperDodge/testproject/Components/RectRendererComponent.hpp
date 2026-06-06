@@ -2,6 +2,7 @@
 
 #include "../Core/Component.hpp"
 #include "../Core/GameObject.hpp"
+#include "../Core/MathUtils.hpp"
 #include "../Rendering/Renderer.hpp"
 #include "PlayerControllerComponent.hpp"
 #include "PlayerStatusComponent.hpp"
@@ -26,7 +27,8 @@ public:
         if (owner == nullptr) return;
         
         // 기본 기체 그리기
-        renderer.DrawRect(owner->GetPosition(), owner->GetSize(), _color);
+        const float radius = GetCircumscribedRadius(owner->GetSize());
+        renderer.DrawCircle(owner->GetPosition(), radius, _color);
 
         // 피탄점 표시
         auto* controller = owner->GetComponent<PlayerControllerComponent>();
@@ -34,8 +36,10 @@ public:
         
         if (controller != nullptr && status != nullptr && controller->IsFocusMode())
         {
-            float r = status->GetHitboxRadius();
-            renderer.DrawRect(owner->GetPosition(), Vector2(r * 2.0f, r * 2.0f), Color(1.0f, 1.0f, 1.0f));
+            renderer.DrawCircle(
+                owner->GetPosition(),
+                status->GetHitboxRadius(),
+                Color(1.0f, 1.0f, 1.0f));
         }
     }
 };

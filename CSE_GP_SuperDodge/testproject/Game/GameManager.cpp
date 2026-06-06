@@ -14,23 +14,6 @@
 #include <algorithm>
 #include <string>
 
-namespace
-{
-    bool IsCircleOverlapRect(const Vector2& circleCenter, float circleRadius, const Rect& rect)
-    {
-        const float halfW = rect.size.x * 0.5f;
-        const float halfH = rect.size.y * 0.5f;
-
-        const float closestX = ClampFloat(circleCenter.x, rect.center.x - halfW, rect.center.x + halfW);
-        const float closestY = ClampFloat(circleCenter.y, rect.center.y - halfH, rect.center.y + halfH);
-
-        const float dx = circleCenter.x - closestX;
-        const float dy = circleCenter.y - closestY;
-
-        return dx * dx + dy * dy <= circleRadius * circleRadius;
-    }
-}
-
 void GameManager::Initialize(HWND hwnd)
 {
     _uiManager.Initialize(hwnd);
@@ -42,7 +25,10 @@ void GameManager::Initialize(HWND hwnd)
     _spawner = spawnerObject->AddComponent(new ObstacleSpawnerComponent(&_world, _config, _player));
     _world.AddObject(spawnerObject);
 
+    _bossManager.Initialize(&_world, _config, _player);
+
     _world.Start();
+    _scoreManager.Initialize();
     _scoreManager.ResetScore();
     _currentState = GameState::Ready;
 
@@ -69,7 +55,8 @@ void GameManager::Update(float deltaTime)
         return;
     }
 
-    if (_currentState == GameState::GameOver && (spacePressed || rPressed))
+    if ((_currentState == GameState::GameOver || _currentState == GameState::GameClear) &&
+        (spacePressed || rPressed))
     {
         RestartGame();
         return;
@@ -87,6 +74,30 @@ void GameManager::Update(float deltaTime)
             _world.ClearActiveObstacles();
             _bombFlashRequest = true;
         }
+    }
+
+    _scoreManager.UpdateScore(deltaTime);
+    BossEvent bossEvent = _bossManager.Update(deltaTime, _scoreManager.GetSurvivalTime());
+    if (bossEvent == BossEvent::Started)
+    {
+        if (_spawner != nullptr)
+            _spawner->SetSpawnCountScale(1.0f / 3.0f);
+    }
+    else if (bossEvent == BossEvent::Ended)
+    {
+        if (_spawner != nullptr)
+            _spawner->SetSpawnCountScale(1.0f);
+    }
+    else if (bossEvent == BossEvent::FinalCleared)
+    {
+        GameClear();
+        return;
+    }
+
+    if (_scoreManager.IsTimeUp() && !_bossManager.IsActive())
+    {
+        GameClear();
+        return;
     }
 
     _world.Update(deltaTime);
@@ -111,10 +122,15 @@ void GameManager::Update(float deltaTime)
             Vector2 obsPos = obj->GetPosition();
             Vector2 obsSize = obj->GetSize();
 
-            const float playerHitboxR = playerStatus->GetHitboxRadius();
-            Rect obstacleBounds{ obsPos, obsSize };
+            const float playerHitboxRadius = playerStatus->GetHitboxRadius();
+            const float playerGrazeRadius = GetCircumscribedRadius(playerSize);
+            const float obstacleHitboxRadius = obstacleStatus->GetHitboxRadius(obsSize);
 
-            if (IsCircleOverlapRect(playerPos, playerHitboxR, obstacleBounds))
+            if (IsCircleOverlap(
+                playerPos,
+                playerHitboxRadius,
+                obsPos,
+                obstacleHitboxRadius))
             {
                 playerStatus->TakeDamage(obstacleStatus->GetDamage());
                 obj->SetActive(false);
@@ -122,17 +138,26 @@ void GameManager::Update(float deltaTime)
                 return;
             }
 
-            Rect grazeBounds{ playerPos, playerSize };
-
-            if (!obstacleStatus->HasGrazed() && IsOverlap(grazeBounds, obstacleBounds))
+            if (!obstacleStatus->HasGrazed() &&
+                IsCircleOverlap(
+                    playerPos,
+                    playerGrazeRadius,
+                    obsPos,
+                    obstacleHitboxRadius))
             {
                 _scoreManager.AddGrazeScore();
                 obstacleStatus->MarkGrazed();
+
+                if (obstacleStatus->IsBossProjectile() && _bossManager.RegisterGraze())
+                {
+                    if (_spawner != nullptr)
+                        _spawner->SetSpawnCountScale(1.0f);
+                    break;
+                }
             }
         }
     }
 
-    _scoreManager.UpdateScore(deltaTime);
 }
 
 void GameManager::Draw(Renderer& renderer, float deltaTime)
@@ -155,6 +180,12 @@ void GameManager::Draw(Renderer& renderer, float deltaTime)
                           Vector2((float)PlayAreaWidth, (float)PlayAreaHeight), 
                           Color(1.0f, 0.0f, 0.0f, 0.4f));
     }
+    else if (_currentState == GameState::GameClear)
+    {
+        renderer.DrawRect(Vector2(PlayAreaWidth * 0.5f, PlayAreaHeight * 0.5f),
+                          Vector2((float)PlayAreaWidth, (float)PlayAreaHeight),
+                          Color(0.1f, 0.4f, 1.0f, 0.35f));
+    }
 
     DrawUI(renderer);
 }
@@ -163,6 +194,7 @@ void GameManager::StartGame()
 {
     _currentState = GameState::Playing;
     _world.ClearActiveObstacles();
+    _bossManager.Reset();
     ResetPlayer();
     if (_spawner != nullptr)
     {
@@ -175,6 +207,7 @@ void GameManager::StartGame()
 void GameManager::GameOver()
 {
     _currentState = GameState::GameOver;
+    FinalizeScore(false);
 
     _spaceWasDown = true;
     _rWasDown = true;
@@ -183,13 +216,45 @@ void GameManager::GameOver()
     if (_spawner != nullptr)
         _spawner->StopSpawn();
 
+    _bossManager.Stop();
+
     if (_player != nullptr)
         _player->SetActive(false);
+}
+
+void GameManager::GameClear()
+{
+    _currentState = GameState::GameClear;
+    FinalizeScore(true);
+
+    _spaceWasDown = true;
+    _rWasDown = true;
+    _xWasDown = true;
+
+    if (_spawner != nullptr)
+        _spawner->StopSpawn();
+
+    _bossManager.Stop();
+    _world.ClearActiveObstacles();
 }
 
 void GameManager::RestartGame()
 {
     StartGame();
+}
+
+void GameManager::FinalizeScore(bool awardBombBonus)
+{
+    int remainingBombs = 0;
+
+    if (_player != nullptr)
+    {
+        PlayerStatusComponent* status = _player->GetComponent<PlayerStatusComponent>();
+        if (status != nullptr)
+            remainingBombs = status->GetBombCount();
+    }
+
+    _scoreManager.FinalizeScore(remainingBombs, awardBombBonus);
 }
 
 void GameManager::ResetPlayer()
@@ -222,34 +287,85 @@ void GameManager::DrawUI(Renderer& renderer)
     renderer.DrawString(L"SCORE", Vector2(uiLeft, 40.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
     renderer.DrawString(std::to_wstring(_scoreManager.GetScore()), Vector2(uiLeft, 65.0f), 32.0f, Color(1.0f, 1.0f, 1.0f));
 
+    // High score
+    renderer.DrawString(L"HIGH SCORE", Vector2(uiLeft, 115.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
+    renderer.DrawString(std::to_wstring(_scoreManager.GetHighScore()), Vector2(uiLeft, 140.0f), 28.0f, Color(1.0f, 0.85f, 0.2f));
+
     // Timer
-    renderer.DrawString(L"TIME", Vector2(uiLeft, 130.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
+    renderer.DrawString(L"TIME", Vector2(uiLeft, 195.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
     int totalSeconds = static_cast<int>(_scoreManager.GetSurvivalTime());
     std::wstring timeStr = std::to_wstring(totalSeconds / 60) + L":" + (totalSeconds % 60 < 10 ? L"0" : L"") + std::to_wstring(totalSeconds % 60);
-    renderer.DrawString(timeStr, Vector2(uiLeft, 155.0f), 32.0f, Color(1.0f, 1.0f, 1.0f));
+    renderer.DrawString(timeStr, Vector2(uiLeft, 220.0f), 32.0f, Color(1.0f, 1.0f, 1.0f));
 
     // Bombs
-    renderer.DrawString(L"BOMBS", Vector2(uiLeft, 220.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
+    renderer.DrawString(L"BOMBS", Vector2(uiLeft, 280.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
     PlayerStatusComponent* status = _player->GetComponent<PlayerStatusComponent>();
     if (status != nullptr)
     {
         int bombs = status->GetBombCount();
         for (int i = 0; i < bombs; ++i)
         {
-            renderer.DrawRect(Vector2(uiLeft + 12.0f + i * 30.0f, 260.0f), 
-                              Vector2(18.0f, 18.0f), Color(0.2f, 0.9f, 0.2f));
+            renderer.DrawStar(
+                Vector2(uiLeft + 12.0f + i * 30.0f, 320.0f),
+                12.0f,
+                5.5f,
+                Color(0.2f, 0.9f, 0.2f));
+        }
+    }
+
+    if (_bossManager.IsActive())
+    {
+        renderer.DrawString(
+            L"BOSS PHASE " + std::to_wstring(_bossManager.GetPhaseNumber()),
+            Vector2(uiLeft, 370.0f),
+            18.0f,
+            Color(1.0f, 0.3f, 0.8f));
+        renderer.DrawString(
+            std::to_wstring(static_cast<int>(std::ceil(_bossManager.GetRemainingTime()))),
+            Vector2(uiLeft, 395.0f),
+            32.0f,
+            Color(1.0f, 0.4f, 0.8f));
+
+        if (_bossManager.IsFinalPhase())
+        {
+            renderer.DrawString(
+                L"SURVIVE",
+                Vector2(uiLeft, 440.0f),
+                18.0f,
+                Color(1.0f, 0.7f, 0.9f));
+        }
+        else
+        {
+            renderer.DrawString(
+                L"GRAZE " + std::to_wstring(_bossManager.GetGrazeCount()) +
+                    L"/" + std::to_wstring(_bossManager.GetGrazeTarget()),
+                Vector2(uiLeft, 440.0f),
+                18.0f,
+                Color(1.0f, 0.7f, 0.9f));
         }
     }
 
     // GameOver
+    const float playCenterY = PlayAreaHeight * 0.5f;
+
     if (_currentState == GameState::GameOver)
     {
-        renderer.DrawString(L"GAME OVER", Vector2(120.0f, 300.0f), 80.0f, Color(1.0f, 0.1f, 0.1f));
-        renderer.DrawString(L"PRESS SPACE TO RESTART", Vector2(160.0f, 420.0f), 28.0f, Color(1.0f, 1.0f, 1.0f));
+        renderer.DrawCenteredString(L"GAME OVER", playCenterY - 60.0f, 80.0f, Color(1.0f, 0.1f, 0.1f));
+        renderer.DrawCenteredString(L"PRESS SPACE TO RESTART", playCenterY + 60.0f, 28.0f, Color(1.0f, 1.0f, 1.0f));
+    }
+    else if (_currentState == GameState::GameClear)
+    {
+        renderer.DrawCenteredString(L"GAME CLEAR", playCenterY - 90.0f, 80.0f, Color(0.2f, 0.8f, 1.0f));
+        renderer.DrawCenteredString(
+            L"BOMB BONUS +" + std::to_wstring(_scoreManager.GetBombBonusScore()),
+            playCenterY + 20.0f,
+            28.0f,
+            Color(1.0f, 0.85f, 0.2f));
+        renderer.DrawCenteredString(L"PRESS SPACE TO RESTART", playCenterY + 80.0f, 28.0f, Color(1.0f, 1.0f, 1.0f));
     }
     else if (_currentState == GameState::Ready)
     {
-        renderer.DrawString(L"PRESS SPACE TO START", Vector2(140.0f, 320.0f), 32.0f, Color(1.0f, 1.0f, 1.0f));
+        renderer.DrawCenteredString(L"PRESS SPACE TO START", playCenterY, 32.0f, Color(1.0f, 1.0f, 1.0f));
     }
 
     renderer.EndText();

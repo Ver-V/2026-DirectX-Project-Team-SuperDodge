@@ -20,6 +20,25 @@ inline bool IsOverlap(const Rect& a, const Rect& b)
     return std::abs(a.center.x - b.center.x) <= ax + bx && std::abs(a.center.y - b.center.y) <= ay + by;
 }
 
+inline float GetCircumscribedRadius(const Vector2& size)
+{
+    const float halfW = size.x * 0.5f;
+    const float halfH = size.y * 0.5f;
+    return std::sqrt(halfW * halfW + halfH * halfH);
+}
+
+inline bool IsCircleOverlap(
+    const Vector2& centerA,
+    float radiusA,
+    const Vector2& centerB,
+    float radiusB)
+{
+    const float dx = centerA.x - centerB.x;
+    const float dy = centerA.y - centerB.y;
+    const float radiusSum = radiusA + radiusB;
+    return dx * dx + dy * dy <= radiusSum * radiusSum;
+}
+
 inline Vector2 Normalize(const Vector2& value)
 {
     float length = std::sqrt(value.x * value.x + value.y * value.y);

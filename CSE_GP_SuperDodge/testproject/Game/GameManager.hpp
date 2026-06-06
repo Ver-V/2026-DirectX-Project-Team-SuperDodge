@@ -6,6 +6,7 @@
 #include "../Core/GameWorld.hpp"
 #include "GameEnums.hpp"
 #include "GameConfig.hpp"
+#include "BossManager.hpp"
 #include "ScoreManager.hpp"
 #include "UIManager.hpp"
 
@@ -24,6 +25,7 @@ private:
     ObstacleSpawnerComponent* _spawner = nullptr;
 
     ScoreManager _scoreManager;
+    BossManager _bossManager;
     UIManager _uiManager;
 
     bool _spaceWasDown = false;
@@ -38,9 +40,11 @@ public:
 
     void StartGame();
     void GameOver();
+    void GameClear();
     void RestartGame();
 
 private:
+    void FinalizeScore(bool awardBombBonus);
     void ResetPlayer();
     void DrawUI(Renderer& renderer);
 };

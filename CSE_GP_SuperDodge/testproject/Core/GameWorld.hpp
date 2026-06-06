@@ -42,7 +42,6 @@ public:
         for (size_t i = 0; i < _objects.size(); ++i)
             _objects[i]->Start();
     }
-// ... rest of code (Update/Render)
 
     void Update(float deltaTime)
     {

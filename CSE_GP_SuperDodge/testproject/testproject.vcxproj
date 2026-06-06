@@ -145,6 +145,7 @@
     <ClInclude Include="Core\GameWorld.hpp" />
     <ClInclude Include="Core\MathTypes.hpp" />
     <ClInclude Include="Core\MathUtils.hpp" />
+    <ClInclude Include="Game\BossManager.hpp" />
     <ClInclude Include="Game\GameConfig.hpp" />
     <ClInclude Include="Game\GameEnums.hpp" />
     <ClInclude Include="Game\GameManager.hpp" />

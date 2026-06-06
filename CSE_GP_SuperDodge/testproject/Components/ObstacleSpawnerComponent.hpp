@@ -27,9 +27,9 @@ private:
     ObjectPool _objectPool;
 
     float _spawnTimer = 0.0f;
-    float _difficultyTimer = 0.0f;
-    float _currentSpawnInterval = 0.75f;
+    float _currentSpawnInterval = 1.00f;
     float _currentObstacleSpeed = 180.0f;
+    float _spawnIntervalMultiplier = 1.0f;
     bool _isSpawning = false;
 
     std::mt19937 _randomEngine;
@@ -40,7 +40,7 @@ public:
     {
         _randomEngine.seed(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
 
-        _objectPool.Initialize(_world, _config, _target, 150);
+        _objectPool.Initialize(_world, _config, 150);
 
         Reset();
     }
@@ -48,9 +48,9 @@ public:
     void Reset()
     {
         _spawnTimer = 0.0f;
-        _difficultyTimer = 0.0f;
         _currentSpawnInterval = _config.spawnStartInterval;
         _currentObstacleSpeed = _config.obstacleStartSpeed;
+        _spawnIntervalMultiplier = 1.0f;
         _isSpawning = false;
 
         _objectPool.Reset();
@@ -66,15 +66,20 @@ public:
         _isSpawning = false;
     }
 
+    void SetSpawnCountScale(float scale)
+    {
+        _spawnIntervalMultiplier = scale > 0.0f ? 1.0f / scale : 1.0f;
+    }
+
     void Update(float deltaTime) override
     {
         if (!_isSpawning) return;
         if (_target == nullptr) return;
 
         _spawnTimer += deltaTime;
-        _difficultyTimer += deltaTime;
 
-        if (_spawnTimer >= _currentSpawnInterval)
+        const float effectiveSpawnInterval = _currentSpawnInterval * _spawnIntervalMultiplier;
+        if (_spawnTimer >= effectiveSpawnInterval)
         {
             _spawnTimer = 0.0f;
             SpawnObstacle();
@@ -135,10 +140,10 @@ private:
         std::uniform_int_distribution<int> typeDist(0, 99);
         int typeValue = typeDist(_randomEngine);
 
-        if (typeValue < 60)
+        if (typeValue < 70)
             return ObstacleType::Normal;
 
-        if (typeValue < 85)
+        if (typeValue < 90)
             return ObstacleType::Fast;
 
         return ObstacleType::Guided;
@@ -157,7 +162,7 @@ private:
 
     void IncreaseDifficulty(float deltaTime)
     {
-        _currentSpawnInterval = std::max(_config.spawnMinInterval, _currentSpawnInterval - 0.018f * deltaTime);
-        _currentObstacleSpeed = std::min(_config.obstacleMaxSpeed, _currentObstacleSpeed + 14.0f * deltaTime);
+        _currentSpawnInterval = std::max(_config.spawnMinInterval, _currentSpawnInterval - 0.005f * deltaTime);
+        _currentObstacleSpeed = std::min(_config.obstacleMaxSpeed, _currentObstacleSpeed + 1.2f * deltaTime);
     }
 };

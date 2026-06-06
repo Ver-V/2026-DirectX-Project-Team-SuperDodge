@@ -6,10 +6,10 @@
 class GuidedAIComponent : public AIComponent
 {
 private:
-    float _trackingStrength = 3.5f;
-    float _speedMultiplier = 0.85f;
+    float _trackingStrength = 3.0f;
+    float _speedMultiplier = 0.80f;
     float _timer = 0.0f;
-    float _despawnTime = 3.0f;
+    float _despawnTime = 2.5f;
 
 public:
     void Initialize(const Vector2& targetPosition, float speed, GameObject* targetObject) override

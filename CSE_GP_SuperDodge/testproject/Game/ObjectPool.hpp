@@ -20,14 +20,12 @@ private:
     std::vector<PooledObject> _pool;
     GameWorld* _world = nullptr;
     GameConfig _config;
-    GameObject* _target = nullptr;
 
 public:
-    void Initialize(GameWorld* world, const GameConfig& config, GameObject* target, int capacity)
+    void Initialize(GameWorld* world, const GameConfig& config, int capacity)
     {
         _world = world;
         _config = config;
-        _target = target;
         _pool.clear();
 
         int perTypeCount = std::max(1, capacity / 3);
@@ -71,11 +69,11 @@ private:
         GameObject* object = nullptr;
 
         if (type == ObstacleType::Normal)
-            object = PrefabFactory::CreateNormalObstacle(_config, _target);
+            object = PrefabFactory::CreateNormalObstacle(_config);
         else if (type == ObstacleType::Fast)
-            object = PrefabFactory::CreateFastObstacle(_config, _target);
+            object = PrefabFactory::CreateFastObstacle(_config);
         else
-            object = PrefabFactory::CreateGuidedObstacle(_config, _target);
+            object = PrefabFactory::CreateGuidedObstacle(_config);
 
         object = _world->AddObject(object);
 

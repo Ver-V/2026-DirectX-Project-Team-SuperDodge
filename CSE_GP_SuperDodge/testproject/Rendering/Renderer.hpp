@@ -6,6 +6,7 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <algorithm>
+#include <map>
 #include <string>
 
 #include "../Core/MathTypes.hpp"
@@ -27,8 +28,8 @@ private:
     ID2D1Factory* _d2dFactory = nullptr;
     ID2D1RenderTarget* _d2dRenderTarget = nullptr;
     IDWriteFactory* _dWriteFactory = nullptr;
-    IDWriteTextFormat* _textFormat = nullptr;
     ID2D1SolidColorBrush* _whiteBrush = nullptr;
+    std::map<float, IDWriteTextFormat*> _textFormats;
 
     float _flashAmount = 0.0f;
 
@@ -39,9 +40,12 @@ public:
     void Clear(float r, float g, float b);
     void Present();
     void DrawRect(const Vector2& center, const Vector2& size, const Color& color);
+    void DrawCircle(const Vector2& center, float radius, const Color& color);
+    void DrawStar(const Vector2& center, float outerRadius, float innerRadius, const Color& color);
     
     void BeginText();
     void DrawString(const std::wstring& text, const Vector2& position, float fontSize, const Color& color);
+    void DrawCenteredString(const std::wstring& text, float centerY, float fontSize, const Color& color);
     void EndText();
 
     void SetFlash(float amount) { _flashAmount = amount; }
@@ -52,6 +56,9 @@ private:
     bool CreateShaders();
     bool CreateVertexBuffer();
     bool InitDirectWrite();
+    bool CreateD2DTargetResources();
+    IDWriteTextFormat* GetTextFormat(float fontSize);
+    void ReleaseD2DTargetResources();
     float PixelToNdcX(float x) const;
     float PixelToNdcY(float y) const;
     void Release();

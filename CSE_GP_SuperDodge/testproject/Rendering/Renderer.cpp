@@ -3,12 +3,27 @@
 #include "../Core/GameConstants.hpp"
 
 #include <d3dcompiler.h>
+#include <cmath>
 #include <cstring>
+#include <vector>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
+
+namespace
+{
+    template<typename T>
+    void SafeRelease(T*& resource)
+    {
+        if (resource != nullptr)
+        {
+            resource->Release();
+            resource = nullptr;
+        }
+    }
+}
 
 Renderer::~Renderer()
 {
@@ -61,8 +76,11 @@ bool Renderer::Initialize(HWND hwnd)
     blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
     ID3D11BlendState* blendState = nullptr;
-    _device->CreateBlendState(&blendDesc, &blendState);
+    hr = _device->CreateBlendState(&blendDesc, &blendState);
+    if (FAILED(hr)) return false;
+
     _context->OMSetBlendState(blendState, nullptr, 0xFFFFFFFF);
+    blendState->Release();
 
     D3D11_VIEWPORT viewport = {};
     viewport.TopLeftX = 0.0f;
@@ -84,8 +102,13 @@ bool Renderer::InitDirectWrite()
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&_dWriteFactory));
     if (FAILED(hr)) return false;
 
+    return CreateD2DTargetResources();
+}
+
+bool Renderer::CreateD2DTargetResources()
+{
     IDXGISurface* surface = nullptr;
-    hr = _swapChain->GetBuffer(0, __uuidof(IDXGISurface), reinterpret_cast<void**>(&surface));
+    HRESULT hr = _swapChain->GetBuffer(0, __uuidof(IDXGISurface), reinterpret_cast<void**>(&surface));
     if (FAILED(hr)) return false;
 
     D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
@@ -97,7 +120,13 @@ bool Renderer::InitDirectWrite()
     if (FAILED(hr)) return false;
 
     hr = _d2dRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &_whiteBrush);
-    return SUCCEEDED(hr);
+    if (FAILED(hr))
+    {
+        ReleaseD2DTargetResources();
+        return false;
+    }
+
+    return true;
 }
 
 void Renderer::Clear(float r, float g, float b)
@@ -128,7 +157,9 @@ void Renderer::DrawRect(const Vector2& center, const Vector2& size, const Color&
     };
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    HRESULT hr = _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) return;
+
     memcpy(mapped.pData, vertices, sizeof(vertices));
     _context->Unmap(_vertexBuffer, 0);
 
@@ -142,6 +173,118 @@ void Renderer::DrawRect(const Vector2& center, const Vector2& size, const Color&
     _context->Draw(6, 0);
 }
 
+void Renderer::DrawCircle(const Vector2& center, float radius, const Color& color)
+{
+    const int segmentCount = 32;
+    const float pi = 3.14159265f;
+    DirectX::XMFLOAT4 c(color.r, color.g, color.b, color.a);
+    std::vector<Vertex> vertices;
+    vertices.reserve(segmentCount * 3);
+
+    const float centerX = PixelToNdcX(center.x);
+    const float centerY = PixelToNdcY(center.y);
+
+    for (int i = 0; i < segmentCount; ++i)
+    {
+        const float angle1 = 2.0f * pi * i / segmentCount;
+        const float angle2 = 2.0f * pi * (i + 1) / segmentCount;
+
+        vertices.push_back({ { centerX, centerY, 0.0f }, c });
+        vertices.push_back({
+            {
+                PixelToNdcX(center.x + std::cos(angle1) * radius),
+                PixelToNdcY(center.y + std::sin(angle1) * radius),
+                0.0f
+            },
+            c
+        });
+        vertices.push_back({
+            {
+                PixelToNdcX(center.x + std::cos(angle2) * radius),
+                PixelToNdcY(center.y + std::sin(angle2) * radius),
+                0.0f
+            },
+            c
+        });
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    HRESULT hr = _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) return;
+
+    memcpy(mapped.pData, vertices.data(), sizeof(Vertex) * vertices.size());
+    _context->Unmap(_vertexBuffer, 0);
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    _context->IASetInputLayout(_inputLayout);
+    _context->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
+    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    _context->VSSetShader(_vertexShader, nullptr, 0);
+    _context->PSSetShader(_pixelShader, nullptr, 0);
+    _context->Draw(static_cast<UINT>(vertices.size()), 0);
+}
+
+void Renderer::DrawStar(
+    const Vector2& center,
+    float outerRadius,
+    float innerRadius,
+    const Color& color)
+{
+    const int pointCount = 5;
+    const int edgeCount = pointCount * 2;
+    const float pi = 3.14159265f;
+    const float startAngle = -pi * 0.5f;
+    DirectX::XMFLOAT4 c(color.r, color.g, color.b, color.a);
+    Vertex vertices[edgeCount * 3];
+
+    const float centerX = PixelToNdcX(center.x);
+    const float centerY = PixelToNdcY(center.y);
+
+    for (int i = 0; i < edgeCount; ++i)
+    {
+        const float angle1 = startAngle + pi * i / pointCount;
+        const float angle2 = startAngle + pi * (i + 1) / pointCount;
+        const float radius1 = (i % 2 == 0) ? outerRadius : innerRadius;
+        const float radius2 = ((i + 1) % 2 == 0) ? outerRadius : innerRadius;
+        const int vertexIndex = i * 3;
+
+        vertices[vertexIndex] = { { centerX, centerY, 0.0f }, c };
+        vertices[vertexIndex + 1] = {
+            {
+                PixelToNdcX(center.x + std::cos(angle1) * radius1),
+                PixelToNdcY(center.y + std::sin(angle1) * radius1),
+                0.0f
+            },
+            c
+        };
+        vertices[vertexIndex + 2] = {
+            {
+                PixelToNdcX(center.x + std::cos(angle2) * radius2),
+                PixelToNdcY(center.y + std::sin(angle2) * radius2),
+                0.0f
+            },
+            c
+        };
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    HRESULT hr = _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) return;
+
+    memcpy(mapped.pData, vertices, sizeof(vertices));
+    _context->Unmap(_vertexBuffer, 0);
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    _context->IASetInputLayout(_inputLayout);
+    _context->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
+    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    _context->VSSetShader(_vertexShader, nullptr, 0);
+    _context->PSSetShader(_pixelShader, nullptr, 0);
+    _context->Draw(edgeCount * 3, 0);
+}
+
 void Renderer::BeginText()
 {
     if (_d2dRenderTarget) _d2dRenderTarget->BeginDraw();
@@ -149,23 +292,58 @@ void Renderer::BeginText()
 
 void Renderer::DrawString(const std::wstring& text, const Vector2& position, float fontSize, const Color& color)
 {
-    if (!_d2dRenderTarget || !_dWriteFactory) return;
+    if (!_d2dRenderTarget || !_dWriteFactory || !_whiteBrush) return;
 
-    IDWriteTextFormat* format = nullptr;
-    _dWriteFactory->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSize, L"en-us", &format);
-    
-    if (format)
-    {
-        _whiteBrush->SetColor(D2D1::ColorF(color.r, color.g, color.b, color.a));
-        D2D1_RECT_F rect = D2D1::RectF(position.x, position.y, position.x + 800.0f, position.y + 150.0f);
-        _d2dRenderTarget->DrawTextW(text.c_str(), (UINT32)text.length(), format, rect, _whiteBrush);
-        format->Release();
-    }
+    IDWriteTextFormat* format = GetTextFormat(fontSize);
+    if (format == nullptr) return;
+
+    _whiteBrush->SetColor(D2D1::ColorF(color.r, color.g, color.b, color.a));
+    D2D1_RECT_F rect = D2D1::RectF(position.x, position.y, position.x + 800.0f, position.y + 150.0f);
+    _d2dRenderTarget->DrawTextW(text.c_str(), static_cast<UINT32>(text.length()), format, rect, _whiteBrush);
+}
+
+void Renderer::DrawCenteredString(
+    const std::wstring& text,
+    float centerY,
+    float fontSize,
+    const Color& color)
+{
+    if (!_d2dRenderTarget || !_dWriteFactory || !_whiteBrush) return;
+
+    IDWriteTextFormat* format = GetTextFormat(fontSize);
+    if (format == nullptr) return;
+
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    _whiteBrush->SetColor(D2D1::ColorF(color.r, color.g, color.b, color.a));
+
+    const float textHeight = fontSize * 1.5f;
+    D2D1_RECT_F rect = D2D1::RectF(
+        0.0f,
+        centerY - textHeight * 0.5f,
+        static_cast<float>(PlayAreaWidth),
+        centerY + textHeight * 0.5f);
+    _d2dRenderTarget->DrawTextW(
+        text.c_str(),
+        static_cast<UINT32>(text.length()),
+        format,
+        rect,
+        _whiteBrush);
+
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
 void Renderer::EndText()
 {
-    if (_d2dRenderTarget) _d2dRenderTarget->EndDraw();
+    if (_d2dRenderTarget == nullptr) return;
+
+    HRESULT hr = _d2dRenderTarget->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET)
+    {
+        ReleaseD2DTargetResources();
+        CreateD2DTargetResources();
+    }
 }
 
 bool Renderer::CreateShaders()
@@ -182,30 +360,63 @@ bool Renderer::CreateShaders()
         float4 PSMain(PS_INPUT input) : SV_TARGET { return input.color; }
     )";
 
-    ID3DBlob *vsBlob = nullptr, *psBlob = nullptr, *errorBlob = nullptr;
-    D3DCompile(shaderCode, strlen(shaderCode), nullptr, nullptr, nullptr, "VSMain", "vs_5_0", 0, 0, &vsBlob, &errorBlob);
-    D3DCompile(shaderCode, strlen(shaderCode), nullptr, nullptr, nullptr, "PSMain", "ps_5_0", 0, 0, &psBlob, &errorBlob);
+    ID3DBlob* vsBlob = nullptr;
+    ID3DBlob* psBlob = nullptr;
+    ID3DBlob* errorBlob = nullptr;
 
-    if (!vsBlob || !psBlob) return false;
+    HRESULT hr = D3DCompile(shaderCode, strlen(shaderCode), nullptr, nullptr, nullptr, "VSMain", "vs_5_0", 0, 0, &vsBlob, &errorBlob);
+    if (FAILED(hr))
+    {
+        if (errorBlob != nullptr)
+            OutputDebugStringA(static_cast<const char*>(errorBlob->GetBufferPointer()));
+        SafeRelease(errorBlob);
+        return false;
+    }
+    SafeRelease(errorBlob);
 
-    _device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &_vertexShader);
-    _device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &_pixelShader);
+    hr = D3DCompile(shaderCode, strlen(shaderCode), nullptr, nullptr, nullptr, "PSMain", "ps_5_0", 0, 0, &psBlob, &errorBlob);
+    if (FAILED(hr))
+    {
+        if (errorBlob != nullptr)
+            OutputDebugStringA(static_cast<const char*>(errorBlob->GetBufferPointer()));
+        SafeRelease(errorBlob);
+        SafeRelease(vsBlob);
+        return false;
+    }
+    SafeRelease(errorBlob);
+
+    hr = _device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &_vertexShader);
+    if (FAILED(hr))
+    {
+        SafeRelease(vsBlob);
+        SafeRelease(psBlob);
+        return false;
+    }
+
+    hr = _device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &_pixelShader);
+    if (FAILED(hr))
+    {
+        SafeRelease(vsBlob);
+        SafeRelease(psBlob);
+        return false;
+    }
 
     D3D11_INPUT_ELEMENT_DESC layout[] = {
         { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
-    _device->CreateInputLayout(layout, 2, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &_inputLayout);
+    hr = _device->CreateInputLayout(layout, 2, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &_inputLayout);
 
-    vsBlob->Release(); psBlob->Release();
-    return true;
+    SafeRelease(vsBlob);
+    SafeRelease(psBlob);
+    return SUCCEEDED(hr);
 }
 
 bool Renderer::CreateVertexBuffer()
 {
     D3D11_BUFFER_DESC desc = {};
     desc.Usage = D3D11_USAGE_DYNAMIC;
-    desc.ByteWidth = sizeof(Vertex) * 6;
+    desc.ByteWidth = sizeof(Vertex) * 32 * 3;
     desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     return SUCCEEDED(_device->CreateBuffer(&desc, nullptr, &_vertexBuffer));
@@ -214,18 +425,50 @@ bool Renderer::CreateVertexBuffer()
 float Renderer::PixelToNdcX(float x) const { return x / ScreenWidth * 2.0f - 1.0f; }
 float Renderer::PixelToNdcY(float y) const { return 1.0f - y / ScreenHeight * 2.0f; }
 
+IDWriteTextFormat* Renderer::GetTextFormat(float fontSize)
+{
+    auto it = _textFormats.find(fontSize);
+    if (it != _textFormats.end())
+        return it->second;
+
+    IDWriteTextFormat* format = nullptr;
+    HRESULT hr = _dWriteFactory->CreateTextFormat(
+        L"Consolas",
+        nullptr,
+        DWRITE_FONT_WEIGHT_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        fontSize,
+        L"en-us",
+        &format);
+
+    if (FAILED(hr)) return nullptr;
+
+    _textFormats.emplace(fontSize, format);
+    return format;
+}
+
+void Renderer::ReleaseD2DTargetResources()
+{
+    SafeRelease(_whiteBrush);
+    SafeRelease(_d2dRenderTarget);
+}
+
 void Renderer::Release()
 {
-    if (_whiteBrush) _whiteBrush->Release();
-    if (_d2dRenderTarget) _d2dRenderTarget->Release();
-    if (_dWriteFactory) _dWriteFactory->Release();
-    if (_d2dFactory) _d2dFactory->Release();
-    if (_vertexBuffer) _vertexBuffer->Release();
-    if (_inputLayout) _inputLayout->Release();
-    if (_pixelShader) _pixelShader->Release();
-    if (_vertexShader) _vertexShader->Release();
-    if (_renderTargetView) _renderTargetView->Release();
-    if (_swapChain) _swapChain->Release();
-    if (_context) _context->Release();
-    if (_device) _device->Release();
+    for (auto& entry : _textFormats)
+        SafeRelease(entry.second);
+    _textFormats.clear();
+
+    ReleaseD2DTargetResources();
+    SafeRelease(_dWriteFactory);
+    SafeRelease(_d2dFactory);
+    SafeRelease(_vertexBuffer);
+    SafeRelease(_inputLayout);
+    SafeRelease(_pixelShader);
+    SafeRelease(_vertexShader);
+    SafeRelease(_renderTargetView);
+    SafeRelease(_swapChain);
+    SafeRelease(_context);
+    SafeRelease(_device);
 }

@@ -104,5 +104,8 @@
     <ClInclude Include="Game\ObstacleData.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="Game\BossManager.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

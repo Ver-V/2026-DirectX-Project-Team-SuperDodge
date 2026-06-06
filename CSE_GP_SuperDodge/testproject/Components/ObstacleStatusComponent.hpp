@@ -1,29 +1,30 @@
 #pragma once
 
 #include "../Core/Component.hpp"
-
-class GameObject;
+#include "../Core/MathTypes.hpp"
+#include "../Core/MathUtils.hpp"
 
 class ObstacleStatusComponent : public Component
 {
 private:
-    GameObject* _target = nullptr;
     int _damage = 1;
     bool _hasGrazed = false;
+    bool _isBossProjectile = false;
 
 public:
-    ObstacleStatusComponent(GameObject* target, int damage = 1)
-        : _target(target), _damage(damage)
+    explicit ObstacleStatusComponent(int damage = 1)
+        : _damage(damage)
     {
-    }
-
-    void SetTarget(GameObject* target)
-    {
-        _target = target;
     }
 
     int GetDamage() const { return _damage; }
     bool HasGrazed() const { return _hasGrazed; }
     void MarkGrazed() { _hasGrazed = true; }
     void ResetGraze() { _hasGrazed = false; }
+    void SetBossProjectile(bool isBossProjectile) { _isBossProjectile = isBossProjectile; }
+    bool IsBossProjectile() const { return _isBossProjectile; }
+    float GetHitboxRadius(const Vector2& size) const
+    {
+        return GetCircumscribedRadius(size);
+    }
 };

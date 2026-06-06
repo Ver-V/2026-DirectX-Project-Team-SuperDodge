@@ -4,8 +4,8 @@ enum class GameState
 {
     Ready,
     Playing,
-    Paused,
-    GameOver
+    GameOver,
+    GameClear
 };
 
 enum class ObstacleType
