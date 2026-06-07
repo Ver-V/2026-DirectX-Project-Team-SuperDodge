@@ -13,6 +13,7 @@
 class Renderer;
 class GameObject;
 class ObstacleSpawnerComponent;
+class InputManager;
 
 class GameManager
 {
@@ -23,18 +24,17 @@ private:
 
     GameObject* _player = nullptr;
     ObstacleSpawnerComponent* _spawner = nullptr;
+    InputManager* _input = nullptr;
 
     ScoreManager _scoreManager;
     BossManager _bossManager;
     UIManager _uiManager;
 
-    bool _spaceWasDown = false;
-    bool _rWasDown = false;
-    bool _xWasDown = false;
     bool _bombFlashRequest = false;
+    int _debugBossPhaseIndex = 0;
 
 public:
-    void Initialize(HWND hwnd);
+    void Initialize(HWND hwnd, InputManager* input);
     void Update(float deltaTime);
     void Draw(Renderer& renderer, float deltaTime);
 
@@ -44,7 +44,7 @@ public:
     void RestartGame();
 
 private:
-    void FinalizeScore(bool awardBombBonus);
+    void FinalizeScore(bool awardClearBonus);
     void ResetPlayer();
     void DrawUI(Renderer& renderer);
 };

@@ -15,7 +15,7 @@ int DodgeApplication::Run(HINSTANCE hInstance, int nCmdShow)
         return 0;
     }
 
-    _gameManager.Initialize(_hwnd);
+    _gameManager.Initialize(_hwnd, &_inputManager);
 
     return RunMessageLoop();
 }
@@ -63,6 +63,7 @@ int DodgeApplication::RunMessageLoop()
 
         float deltaTime = std::min(elapsed.count(), 0.033f);
 
+        _inputManager.Update();
         _gameManager.Update(deltaTime);
         _gameManager.Draw(_renderer, deltaTime);
         _renderer.Present();

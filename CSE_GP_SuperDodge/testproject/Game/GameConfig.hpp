@@ -8,7 +8,7 @@ struct GameConfig
 {
     float playerMoveSpeed = 420.0f;
     Vector2 playerSize = Vector2(42.0f, 42.0f);
-    int playerHp = 1;
+    int playerHp = 3;
 
     ObstacleData normalObstacle = ObstacleData{ 40.0f, Color(1.0f, 0.25f, 0.25f) };
     ObstacleData fastObstacle = ObstacleData{ 20.0f, Color(1.0f, 0.85f, 0.15f) };

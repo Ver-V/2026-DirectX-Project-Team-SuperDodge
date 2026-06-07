@@ -1,4 +1,5 @@
 #include "Renderer.hpp"
+#include "PrimitiveMeshBuilder.hpp"
 
 #include "../Core/GameConstants.hpp"
 
@@ -143,86 +144,36 @@ void Renderer::Present()
     _swapChain->Present(1, 0);
 }
 
-void Renderer::DrawRect(const Vector2& center, const Vector2& size, const Color& color)
+void Renderer::DrawMesh(const Mesh& mesh)
 {
-    float left = PixelToNdcX(center.x - size.x * 0.5f);
-    float right = PixelToNdcX(center.x + size.x * 0.5f);
-    float top = PixelToNdcY(center.y - size.y * 0.5f);
-    float bottom = PixelToNdcY(center.y + size.y * 0.5f);
-
-    DirectX::XMFLOAT4 c(color.r, color.g, color.b, color.a);
-    Vertex vertices[6] = {
-        {{ left, top, 0.0f }, c}, {{ right, bottom, 0.0f }, c}, {{ left, bottom, 0.0f }, c},
-        {{ left, top, 0.0f }, c}, {{ right, top, 0.0f }, c}, {{ right, bottom, 0.0f }, c},
-    };
+    if (mesh.IsEmpty() || mesh.GetVertexCount() > VertexBufferCapacity)
+        return;
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     HRESULT hr = _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     if (FAILED(hr)) return;
 
-    memcpy(mapped.pData, vertices, sizeof(vertices));
+    memcpy(mapped.pData, mesh.GetVertexData(), mesh.GetVertexDataSize());
     _context->Unmap(_vertexBuffer, 0);
 
     UINT stride = sizeof(Vertex);
     UINT offset = 0;
     _context->IASetInputLayout(_inputLayout);
     _context->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
-    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    _context->IASetPrimitiveTopology(mesh.GetTopology());
     _context->VSSetShader(_vertexShader, nullptr, 0);
     _context->PSSetShader(_pixelShader, nullptr, 0);
-    _context->Draw(6, 0);
+    _context->Draw(mesh.GetVertexCount(), 0);
+}
+
+void Renderer::DrawRect(const Vector2& center, const Vector2& size, const Color& color)
+{
+    DrawMesh(PrimitiveMeshBuilder::CreateRect(center, size, color));
 }
 
 void Renderer::DrawCircle(const Vector2& center, float radius, const Color& color)
 {
-    const int segmentCount = 32;
-    const float pi = 3.14159265f;
-    DirectX::XMFLOAT4 c(color.r, color.g, color.b, color.a);
-    std::vector<Vertex> vertices;
-    vertices.reserve(segmentCount * 3);
-
-    const float centerX = PixelToNdcX(center.x);
-    const float centerY = PixelToNdcY(center.y);
-
-    for (int i = 0; i < segmentCount; ++i)
-    {
-        const float angle1 = 2.0f * pi * i / segmentCount;
-        const float angle2 = 2.0f * pi * (i + 1) / segmentCount;
-
-        vertices.push_back({ { centerX, centerY, 0.0f }, c });
-        vertices.push_back({
-            {
-                PixelToNdcX(center.x + std::cos(angle1) * radius),
-                PixelToNdcY(center.y + std::sin(angle1) * radius),
-                0.0f
-            },
-            c
-        });
-        vertices.push_back({
-            {
-                PixelToNdcX(center.x + std::cos(angle2) * radius),
-                PixelToNdcY(center.y + std::sin(angle2) * radius),
-                0.0f
-            },
-            c
-        });
-    }
-
-    D3D11_MAPPED_SUBRESOURCE mapped = {};
-    HRESULT hr = _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) return;
-
-    memcpy(mapped.pData, vertices.data(), sizeof(Vertex) * vertices.size());
-    _context->Unmap(_vertexBuffer, 0);
-
-    UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-    _context->IASetInputLayout(_inputLayout);
-    _context->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
-    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    _context->VSSetShader(_vertexShader, nullptr, 0);
-    _context->PSSetShader(_pixelShader, nullptr, 0);
-    _context->Draw(static_cast<UINT>(vertices.size()), 0);
+    DrawMesh(PrimitiveMeshBuilder::CreateCircle(center, radius, color));
 }
 
 void Renderer::DrawStar(
@@ -231,58 +182,12 @@ void Renderer::DrawStar(
     float innerRadius,
     const Color& color)
 {
-    const int pointCount = 5;
-    const int edgeCount = pointCount * 2;
-    const float pi = 3.14159265f;
-    const float startAngle = -pi * 0.5f;
-    DirectX::XMFLOAT4 c(color.r, color.g, color.b, color.a);
-    Vertex vertices[edgeCount * 3];
+    DrawMesh(PrimitiveMeshBuilder::CreateStar(center, outerRadius, innerRadius, color));
+}
 
-    const float centerX = PixelToNdcX(center.x);
-    const float centerY = PixelToNdcY(center.y);
-
-    for (int i = 0; i < edgeCount; ++i)
-    {
-        const float angle1 = startAngle + pi * i / pointCount;
-        const float angle2 = startAngle + pi * (i + 1) / pointCount;
-        const float radius1 = (i % 2 == 0) ? outerRadius : innerRadius;
-        const float radius2 = ((i + 1) % 2 == 0) ? outerRadius : innerRadius;
-        const int vertexIndex = i * 3;
-
-        vertices[vertexIndex] = { { centerX, centerY, 0.0f }, c };
-        vertices[vertexIndex + 1] = {
-            {
-                PixelToNdcX(center.x + std::cos(angle1) * radius1),
-                PixelToNdcY(center.y + std::sin(angle1) * radius1),
-                0.0f
-            },
-            c
-        };
-        vertices[vertexIndex + 2] = {
-            {
-                PixelToNdcX(center.x + std::cos(angle2) * radius2),
-                PixelToNdcY(center.y + std::sin(angle2) * radius2),
-                0.0f
-            },
-            c
-        };
-    }
-
-    D3D11_MAPPED_SUBRESOURCE mapped = {};
-    HRESULT hr = _context->Map(_vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) return;
-
-    memcpy(mapped.pData, vertices, sizeof(vertices));
-    _context->Unmap(_vertexBuffer, 0);
-
-    UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-    _context->IASetInputLayout(_inputLayout);
-    _context->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
-    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    _context->VSSetShader(_vertexShader, nullptr, 0);
-    _context->PSSetShader(_pixelShader, nullptr, 0);
-    _context->Draw(edgeCount * 3, 0);
+void Renderer::DrawHeart(const Vector2& center, float size, const Color& color)
+{
+    DrawMesh(PrimitiveMeshBuilder::CreateHeart(center, size, color));
 }
 
 void Renderer::BeginText()
@@ -416,14 +321,11 @@ bool Renderer::CreateVertexBuffer()
 {
     D3D11_BUFFER_DESC desc = {};
     desc.Usage = D3D11_USAGE_DYNAMIC;
-    desc.ByteWidth = sizeof(Vertex) * 32 * 3;
+    desc.ByteWidth = sizeof(Vertex) * VertexBufferCapacity;
     desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     return SUCCEEDED(_device->CreateBuffer(&desc, nullptr, &_vertexBuffer));
 }
-
-float Renderer::PixelToNdcX(float x) const { return x / ScreenWidth * 2.0f - 1.0f; }
-float Renderer::PixelToNdcY(float y) const { return 1.0f - y / ScreenHeight * 2.0f; }
 
 IDWriteTextFormat* Renderer::GetTextFormat(float fontSize)
 {

@@ -207,6 +207,31 @@ public:
         return (std::max)(0.0f, GetCurrentConfig().duration - _bossElapsed);
     }
 
+    float GetNextPhaseRemainingTime(float survivalTime) const
+    {
+        if (_state != BossState::Waiting || _nextPhaseIndex >= PhaseCount)
+            return -1.0f;
+
+        const BossPhaseConfig* phaseConfigs = GetPhaseConfigs();
+        return phaseConfigs[_nextPhaseIndex].spawnTime - survivalTime;
+    }
+
+    bool IsWarningTime(float survivalTime) const
+    {
+        const float remainingTime = GetNextPhaseRemainingTime(survivalTime);
+        return remainingTime > 0.0f && remainingTime <= 5.0f;
+    }
+
+    void ForceStartPhase(int phaseIndex)
+    {
+        if (phaseIndex < 0 || phaseIndex >= PhaseCount)
+            return;
+
+        const BossPhaseConfig* phaseConfigs = GetPhaseConfigs();
+        StartPhase(phaseConfigs[phaseIndex]);
+        _nextPhaseIndex = phaseIndex + 1;
+    }
+
 private:
     static const BossPhaseConfig* GetPhaseConfigs()
     {

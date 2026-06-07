@@ -7,20 +7,23 @@
 #include "../Components/PlayerStatusComponent.hpp"
 #include "../Components/PlayerControllerComponent.hpp"
 #include "../Components/ObstacleStatusComponent.hpp"
+#include "../Components/StarItemComponent.hpp"
 #include "../Components/NormalAIComponent.hpp"
 #include "../Components/FastAIComponent.hpp"
 #include "../Components/GuidedAIComponent.hpp"
 
+class InputManager;
+
 class PrefabFactory
 {
 public:
-    static GameObject* CreatePlayer(const GameConfig& config)
+    static GameObject* CreatePlayer(const GameConfig& config, InputManager* input)
     {
         GameObject* player = new GameObject(Vector2(PlayAreaWidth * 0.5f, PlayAreaHeight * 0.5f), config.playerSize);
 
         player->AddComponent(new RectRendererComponent(Color(0.25f, 0.75f, 1.0f)));
         player->AddComponent(new PlayerStatusComponent());
-        player->AddComponent(new PlayerControllerComponent(config.playerMoveSpeed));
+        player->AddComponent(new PlayerControllerComponent(config.playerMoveSpeed, input));
 
         PlayerStatusComponent* status = player->GetComponent<PlayerStatusComponent>();
         if (status != nullptr)
@@ -69,5 +72,17 @@ public:
         obstacle->SetActive(false);
 
         return obstacle;
+    }
+
+    static GameObject* CreateStarItem()
+    {
+        GameObject* star = new GameObject(
+            Vector2(-1000.0f, -1000.0f),
+            Vector2(36.0f, 36.0f));
+
+        star->AddComponent(new StarItemComponent());
+        star->SetActive(false);
+
+        return star;
     }
 };

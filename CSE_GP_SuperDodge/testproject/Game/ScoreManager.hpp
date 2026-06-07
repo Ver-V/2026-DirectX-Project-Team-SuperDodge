@@ -3,19 +3,30 @@
 #define NOMINMAX
 #include <windows.h>
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <string>
 
 class ScoreManager
 {
 private:
+    static constexpr int RankingCapacity = 10;
+    static constexpr DWORD RankingFileMagic = 0x4B4E4152; // "RANK"
+    static constexpr DWORD RankingFileVersion = 1;
+
     float _survivalTime = 0.0f;
     int _bonusScore = 0;
     int _bombBonusScore = 0;
+    int _lifeBonusScore = 0;
     int _highScore = 0;
+    std::array<int, RankingCapacity> _rankings = {};
+    int _rankingCount = 0;
+    int _lastRank = 0;
     bool _isFinalized = false;
 
 public:
     static constexpr int BombBonusPerCount = 10000;
+    static constexpr int LifeBonusPerCount = 10000;
 
     void Initialize()
     {
@@ -27,6 +38,8 @@ public:
         _survivalTime = 0.0f;
         _bonusScore = 0;
         _bombBonusScore = 0;
+        _lifeBonusScore = 0;
+        _lastRank = 0;
         _isFinalized = false;
     }
 
@@ -45,25 +58,37 @@ public:
         _bonusScore += amount;
     }
 
-    void FinalizeScore(int remainingBombs, bool awardBombBonus)
+    void FinalizeScore(int remainingBombs, int remainingLives, bool awardClearBonus)
     {
         if (_isFinalized) return;
 
-        _bombBonusScore = awardBombBonus
+        _bombBonusScore = awardClearBonus
             ? (std::max)(0, remainingBombs) * BombBonusPerCount
+            : 0;
+        _lifeBonusScore = awardClearBonus
+            ? (std::max)(0, remainingLives) * LifeBonusPerCount
             : 0;
         _isFinalized = true;
 
-        if (GetScore() > _highScore)
-        {
-            _highScore = GetScore();
-            SaveHighScore();
-        }
+        RegisterRankingScore(GetScore());
     }
 
     int GetScore() const
     {
-        return static_cast<int>(_survivalTime * 10.0f) + _bonusScore + _bombBonusScore;
+        return static_cast<int>(_survivalTime * 10.0f) +
+            _bonusScore +
+            _bombBonusScore +
+            _lifeBonusScore;
+    }
+
+    int GetSurvivalScore() const
+    {
+        return static_cast<int>(_survivalTime * 10.0f);
+    }
+
+    int GetBonusScore() const
+    {
+        return _bonusScore;
     }
 
     float GetSurvivalTime() const
@@ -76,9 +101,32 @@ public:
         return _bombBonusScore;
     }
 
+    int GetLifeBonusScore() const
+    {
+        return _lifeBonusScore;
+    }
+
     int GetHighScore() const
     {
         return _highScore;
+    }
+
+    int GetRankingCount() const
+    {
+        return _rankingCount;
+    }
+
+    int GetRankingScore(int index) const
+    {
+        if (index < 0 || index >= _rankingCount)
+            return 0;
+
+        return _rankings[index];
+    }
+
+    int GetLastRank() const
+    {
+        return _lastRank;
     }
 
     bool IsTimeUp() const
@@ -121,13 +169,50 @@ private:
         if (file == INVALID_HANDLE_VALUE)
             return;
 
-        int storedScore = 0;
+        struct RankingFileData
+        {
+            DWORD magic;
+            DWORD version;
+            DWORD count;
+            int scores[RankingCapacity];
+        };
+
+        RankingFileData data = {};
         DWORD bytesRead = 0;
-        BOOL success = ReadFile(file, &storedScore, sizeof(storedScore), &bytesRead, nullptr);
+        BOOL success = ReadFile(file, &data, sizeof(data), &bytesRead, nullptr);
         CloseHandle(file);
 
-        if (success && bytesRead == sizeof(storedScore) && storedScore >= 0)
-            _highScore = storedScore;
+        if (!success)
+            return;
+
+        // Old versions stored only one integer in highscore.dat.
+        if (bytesRead == sizeof(int))
+        {
+            int storedScore = 0;
+            CopyMemory(&storedScore, &data, sizeof(storedScore));
+            if (storedScore >= 0)
+            {
+                _rankings[0] = storedScore;
+                _rankingCount = 1;
+                _highScore = storedScore;
+            }
+            return;
+        }
+
+        if (bytesRead != sizeof(data) ||
+            data.magic != RankingFileMagic ||
+            data.version != RankingFileVersion ||
+            data.count > RankingCapacity)
+        {
+            return;
+        }
+
+        _rankingCount = static_cast<int>(data.count);
+        for (int i = 0; i < _rankingCount; ++i)
+            _rankings[i] = (std::max)(0, data.scores[i]);
+
+        std::sort(_rankings.begin(), _rankings.begin() + _rankingCount, std::greater<int>());
+        _highScore = _rankingCount > 0 ? _rankings[0] : 0;
     }
 
     void SaveHighScore() const
@@ -144,8 +229,46 @@ private:
         if (file == INVALID_HANDLE_VALUE)
             return;
 
+        struct RankingFileData
+        {
+            DWORD magic;
+            DWORD version;
+            DWORD count;
+            int scores[RankingCapacity];
+        };
+
+        RankingFileData data = {};
+        data.magic = RankingFileMagic;
+        data.version = RankingFileVersion;
+        data.count = static_cast<DWORD>(_rankingCount);
+        for (int i = 0; i < _rankingCount; ++i)
+            data.scores[i] = _rankings[i];
+
         DWORD bytesWritten = 0;
-        WriteFile(file, &_highScore, sizeof(_highScore), &bytesWritten, nullptr);
+        WriteFile(file, &data, sizeof(data), &bytesWritten, nullptr);
         CloseHandle(file);
+    }
+
+    void RegisterRankingScore(int score)
+    {
+        int insertIndex = 0;
+        while (insertIndex < _rankingCount && _rankings[insertIndex] >= score)
+            ++insertIndex;
+
+        if (insertIndex >= RankingCapacity)
+        {
+            _lastRank = 0;
+            return;
+        }
+
+        int newCount = (std::min)(_rankingCount + 1, RankingCapacity);
+        for (int i = newCount - 1; i > insertIndex; --i)
+            _rankings[i] = _rankings[i - 1];
+
+        _rankings[insertIndex] = score;
+        _rankingCount = newCount;
+        _lastRank = insertIndex + 1;
+        _highScore = _rankings[0];
+        SaveHighScore();
     }
 };

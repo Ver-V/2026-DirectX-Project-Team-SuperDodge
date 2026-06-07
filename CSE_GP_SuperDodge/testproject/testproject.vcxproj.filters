@@ -56,6 +56,9 @@
     <ClInclude Include="Components\RectRendererComponent.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="Components\StarItemComponent.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="Core\Component.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -69,6 +72,9 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Core\GameWorld.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\InputManager.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Core\MathTypes.hpp">
@@ -99,6 +105,12 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Renderer.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Mesh.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PrimitiveMeshBuilder.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Game\ObstacleData.hpp">

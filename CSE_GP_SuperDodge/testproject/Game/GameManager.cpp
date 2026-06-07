@@ -3,23 +3,26 @@
 #include "../Rendering/Renderer.hpp"
 #include "../Core/GameObject.hpp"
 #include "../Core/GameConstants.hpp"
+#include "../Core/InputManager.hpp"
 #include "../Core/MathUtils.hpp"
 
 #include "PrefabFactory.hpp"
 #include "../Components/ObstacleSpawnerComponent.hpp"
 #include "../Components/PlayerStatusComponent.hpp"
 #include "../Components/ObstacleStatusComponent.hpp"
+#include "../Components/StarItemComponent.hpp"
 
 #include <cmath>
 #include <algorithm>
 #include <string>
 
-void GameManager::Initialize(HWND hwnd)
+void GameManager::Initialize(HWND hwnd, InputManager* input)
 {
+    _input = input;
     _uiManager.Initialize(hwnd);
     _world.Clear();
 
-    _player = _world.AddObject(PrefabFactory::CreatePlayer(_config));
+    _player = _world.AddObject(PrefabFactory::CreatePlayer(_config, _input));
 
     GameObject* spawnerObject = new GameObject(Vector2(0.0f, 0.0f), Vector2(1.0f, 1.0f));
     _spawner = spawnerObject->AddComponent(new ObstacleSpawnerComponent(&_world, _config, _player));
@@ -37,26 +40,17 @@ void GameManager::Initialize(HWND hwnd)
 
 void GameManager::Update(float deltaTime)
 {
-    bool spaceDown = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
-    bool rDown = (GetAsyncKeyState('R') & 0x8000) != 0;
-    bool xDown = (GetAsyncKeyState('X') & 0x8000) != 0;
+    if (_input == nullptr)
+        return;
 
-    bool spacePressed = spaceDown && !_spaceWasDown;
-    bool rPressed = rDown && !_rWasDown;
-    bool xPressed = xDown && !_xWasDown;
-
-    _spaceWasDown = spaceDown;
-    _rWasDown = rDown;
-    _xWasDown = xDown;
-
-    if (_currentState == GameState::Ready && spacePressed)
+    if (_currentState == GameState::Ready && _input->IsKeyPressed(VK_SPACE))
     {
         StartGame();
         return;
     }
 
     if ((_currentState == GameState::GameOver || _currentState == GameState::GameClear) &&
-        (spacePressed || rPressed))
+        (_input->IsKeyPressed(VK_SPACE) || _input->IsKeyPressed('R')))
     {
         RestartGame();
         return;
@@ -65,8 +59,17 @@ void GameManager::Update(float deltaTime)
     if (_currentState != GameState::Playing)
         return;
 
+    if (_input->IsKeyPressed(VK_F5))
+    {
+        _bossManager.ForceStartPhase(_debugBossPhaseIndex);
+        _debugBossPhaseIndex = (_debugBossPhaseIndex + 1) % 5;
+
+        if (_spawner != nullptr)
+            _spawner->SetSpawnCountScale(1.0f / 3.0f);
+    }
+
     // 폭탄 사용
-    if (xPressed)
+    if (_input->IsKeyPressed('X'))
     {
         PlayerStatusComponent* status = _player->GetComponent<PlayerStatusComponent>();
         if (status != nullptr && status->UseBomb())
@@ -115,6 +118,21 @@ void GameManager::Update(float deltaTime)
             if (!obj->IsActive() || obj.get() == _player)
                 continue;
 
+            StarItemComponent* starItem = obj->GetComponent<StarItemComponent>();
+            if (starItem != nullptr)
+            {
+                if (IsCircleOverlap(
+                    playerPos,
+                    GetCircumscribedRadius(playerSize),
+                    obj->GetPosition(),
+                    starItem->GetPickupRadius()))
+                {
+                    playerStatus->CollectStar();
+                    obj->SetActive(false);
+                }
+                continue;
+            }
+
             ObstacleStatusComponent* obstacleStatus = obj->GetComponent<ObstacleStatusComponent>();
             if (obstacleStatus == nullptr)
                 continue;
@@ -132,10 +150,16 @@ void GameManager::Update(float deltaTime)
                 obsPos,
                 obstacleHitboxRadius))
             {
-                playerStatus->TakeDamage(obstacleStatus->GetDamage());
-                obj->SetActive(false);
-                GameOver();
-                return;
+                if (playerStatus->TakeDamage(obstacleStatus->GetDamage()))
+                {
+                    obj->SetActive(false);
+                    if (playerStatus->IsDead())
+                    {
+                        GameOver();
+                        return;
+                    }
+                }
+                continue;
             }
 
             if (!obstacleStatus->HasGrazed() &&
@@ -193,6 +217,7 @@ void GameManager::Draw(Renderer& renderer, float deltaTime)
 void GameManager::StartGame()
 {
     _currentState = GameState::Playing;
+    _debugBossPhaseIndex = 0;
     _world.ClearActiveObstacles();
     _bossManager.Reset();
     ResetPlayer();
@@ -209,10 +234,6 @@ void GameManager::GameOver()
     _currentState = GameState::GameOver;
     FinalizeScore(false);
 
-    _spaceWasDown = true;
-    _rWasDown = true;
-    _xWasDown = true;
-
     if (_spawner != nullptr)
         _spawner->StopSpawn();
 
@@ -227,10 +248,6 @@ void GameManager::GameClear()
     _currentState = GameState::GameClear;
     FinalizeScore(true);
 
-    _spaceWasDown = true;
-    _rWasDown = true;
-    _xWasDown = true;
-
     if (_spawner != nullptr)
         _spawner->StopSpawn();
 
@@ -243,18 +260,22 @@ void GameManager::RestartGame()
     StartGame();
 }
 
-void GameManager::FinalizeScore(bool awardBombBonus)
+void GameManager::FinalizeScore(bool awardClearBonus)
 {
     int remainingBombs = 0;
+    int remainingLives = 0;
 
     if (_player != nullptr)
     {
         PlayerStatusComponent* status = _player->GetComponent<PlayerStatusComponent>();
         if (status != nullptr)
+        {
             remainingBombs = status->GetBombCount();
+            remainingLives = status->GetHp();
+        }
     }
 
-    _scoreManager.FinalizeScore(remainingBombs, awardBombBonus);
+    _scoreManager.FinalizeScore(remainingBombs, remainingLives, awardClearBonus);
 }
 
 void GameManager::ResetPlayer()
@@ -297,16 +318,32 @@ void GameManager::DrawUI(Renderer& renderer)
     std::wstring timeStr = std::to_wstring(totalSeconds / 60) + L":" + (totalSeconds % 60 < 10 ? L"0" : L"") + std::to_wstring(totalSeconds % 60);
     renderer.DrawString(timeStr, Vector2(uiLeft, 220.0f), 32.0f, Color(1.0f, 1.0f, 1.0f));
 
-    // Bombs
-    renderer.DrawString(L"BOMBS", Vector2(uiLeft, 280.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
     PlayerStatusComponent* status = _player->GetComponent<PlayerStatusComponent>();
     if (status != nullptr)
     {
+        // Life
+        renderer.DrawString(L"LIFE", Vector2(uiLeft, 275.0f), 18.0f, Color(0.9f, 0.35f, 0.35f));
+        for (int i = 0; i < status->GetHp(); ++i)
+        {
+            renderer.DrawHeart(
+                Vector2(uiLeft + 13.0f + i * 30.0f, 315.0f),
+                25.0f,
+                Color(1.0f, 0.15f, 0.2f));
+        }
+
+        renderer.DrawString(
+            L"STAR " + std::to_wstring(status->GetCollectedStars()) + L"/3",
+            Vector2(uiLeft, 340.0f),
+            16.0f,
+            Color(1.0f, 0.85f, 0.2f));
+
+        // Bombs
+        renderer.DrawString(L"BOMBS", Vector2(uiLeft, 385.0f), 18.0f, Color(0.7f, 0.7f, 0.7f));
         int bombs = status->GetBombCount();
         for (int i = 0; i < bombs; ++i)
         {
             renderer.DrawStar(
-                Vector2(uiLeft + 12.0f + i * 30.0f, 320.0f),
+                Vector2(uiLeft + 12.0f + i * 30.0f, 425.0f),
                 12.0f,
                 5.5f,
                 Color(0.2f, 0.9f, 0.2f));
@@ -317,12 +354,12 @@ void GameManager::DrawUI(Renderer& renderer)
     {
         renderer.DrawString(
             L"BOSS PHASE " + std::to_wstring(_bossManager.GetPhaseNumber()),
-            Vector2(uiLeft, 370.0f),
+            Vector2(uiLeft, 480.0f),
             18.0f,
             Color(1.0f, 0.3f, 0.8f));
         renderer.DrawString(
             std::to_wstring(static_cast<int>(std::ceil(_bossManager.GetRemainingTime()))),
-            Vector2(uiLeft, 395.0f),
+            Vector2(uiLeft, 505.0f),
             32.0f,
             Color(1.0f, 0.4f, 0.8f));
 
@@ -330,7 +367,7 @@ void GameManager::DrawUI(Renderer& renderer)
         {
             renderer.DrawString(
                 L"SURVIVE",
-                Vector2(uiLeft, 440.0f),
+                Vector2(uiLeft, 550.0f),
                 18.0f,
                 Color(1.0f, 0.7f, 0.9f));
         }
@@ -339,33 +376,119 @@ void GameManager::DrawUI(Renderer& renderer)
             renderer.DrawString(
                 L"GRAZE " + std::to_wstring(_bossManager.GetGrazeCount()) +
                     L"/" + std::to_wstring(_bossManager.GetGrazeTarget()),
-                Vector2(uiLeft, 440.0f),
+                Vector2(uiLeft, 550.0f),
                 18.0f,
                 Color(1.0f, 0.7f, 0.9f));
         }
     }
 
-    // GameOver
-    const float playCenterY = PlayAreaHeight * 0.5f;
-
-    if (_currentState == GameState::GameOver)
+    if (_currentState == GameState::Playing &&
+        _bossManager.IsWarningTime(_scoreManager.GetSurvivalTime()) &&
+        static_cast<int>(_scoreManager.GetSurvivalTime() * 4.0f) % 2 == 0)
     {
-        renderer.DrawCenteredString(L"GAME OVER", playCenterY - 60.0f, 80.0f, Color(1.0f, 0.1f, 0.1f));
-        renderer.DrawCenteredString(L"PRESS SPACE TO RESTART", playCenterY + 60.0f, 28.0f, Color(1.0f, 1.0f, 1.0f));
-    }
-    else if (_currentState == GameState::GameClear)
-    {
-        renderer.DrawCenteredString(L"GAME CLEAR", playCenterY - 90.0f, 80.0f, Color(0.2f, 0.8f, 1.0f));
+        const int remainingTime = static_cast<int>(
+            std::ceil(_bossManager.GetNextPhaseRemainingTime(_scoreManager.GetSurvivalTime())));
+        renderer.DrawCenteredString(L"WARNING", 70.0f, 54.0f, Color(1.0f, 0.0f, 0.0f));
         renderer.DrawCenteredString(
-            L"BOMB BONUS +" + std::to_wstring(_scoreManager.GetBombBonusScore()),
-            playCenterY + 20.0f,
-            28.0f,
+            L"BOSS IN " + std::to_wstring(remainingTime),
+            120.0f,
+            24.0f,
+            Color(1.0f, 0.35f, 0.35f));
+    }
+
+    // Game result and top 10 ranking
+    if (_currentState == GameState::GameOver || _currentState == GameState::GameClear)
+    {
+        const bool isGameClear = _currentState == GameState::GameClear;
+        const Color titleColor = isGameClear
+            ? Color(0.2f, 0.8f, 1.0f)
+            : Color(1.0f, 0.1f, 0.1f);
+
+        renderer.DrawCenteredString(
+            isGameClear ? L"GAME CLEAR" : L"GAME OVER",
+            70.0f,
+            56.0f,
+            titleColor);
+        renderer.DrawCenteredString(
+            L"FINAL SCORE  " + std::to_wstring(_scoreManager.GetScore()),
+            130.0f,
+            30.0f,
+            Color(1.0f, 1.0f, 1.0f));
+
+        const int lastRank = _scoreManager.GetLastRank();
+        renderer.DrawCenteredString(
+            lastRank > 0
+                ? L"YOUR RANK  #" + std::to_wstring(lastRank)
+                : L"YOUR RANK  OUT OF TOP 10",
+            170.0f,
+            24.0f,
+            lastRank > 0 ? Color(1.0f, 0.85f, 0.2f) : Color(0.75f, 0.75f, 0.75f));
+
+        renderer.DrawCenteredString(L"TOP 10", 220.0f, 30.0f, Color(1.0f, 0.85f, 0.2f));
+
+        const int rankingCount = _scoreManager.GetRankingCount();
+        for (int i = 0; i < 10; ++i)
+        {
+            const int rank = i + 1;
+            const bool isCurrentScore = rank == lastRank;
+            const std::wstring scoreText = i < rankingCount
+                ? std::to_wstring(_scoreManager.GetRankingScore(i))
+                : L"---";
+            const std::wstring rankingText =
+                (isCurrentScore ? L"> " : L"  ") +
+                std::to_wstring(rank) + L".  " + scoreText +
+                (isCurrentScore ? L" <" : L"");
+
+            renderer.DrawCenteredString(
+                rankingText,
+                265.0f + i * 55.0f,
+                isCurrentScore ? 28.0f : 24.0f,
+                isCurrentScore
+                    ? Color(1.0f, 0.85f, 0.2f)
+                    : Color(0.9f, 0.9f, 0.9f));
+        }
+
+        renderer.DrawCenteredString(
+            L"SURVIVAL +" + std::to_wstring(_scoreManager.GetSurvivalScore()) +
+                L"   BONUS +" + std::to_wstring(_scoreManager.GetBonusScore()),
+            790.0f,
+            20.0f,
+            Color(0.85f, 0.85f, 0.85f));
+
+        if (isGameClear)
+        {
+            renderer.DrawCenteredString(
+                L"BOMB BONUS +" + std::to_wstring(_scoreManager.GetBombBonusScore()),
+                820.0f,
+                22.0f,
+                Color(0.4f, 0.9f, 1.0f));
+            renderer.DrawCenteredString(
+                L"LIFE BONUS +" + std::to_wstring(_scoreManager.GetLifeBonusScore()),
+                850.0f,
+                22.0f,
+                Color(1.0f, 0.35f, 0.4f));
+        }
+
+        renderer.DrawCenteredString(
+            L"FINAL SCORE  " + std::to_wstring(_scoreManager.GetScore()),
+            isGameClear ? 885.0f : 835.0f,
+            24.0f,
             Color(1.0f, 0.85f, 0.2f));
-        renderer.DrawCenteredString(L"PRESS SPACE TO RESTART", playCenterY + 80.0f, 28.0f, Color(1.0f, 1.0f, 1.0f));
+
+        renderer.DrawCenteredString(
+            L"PRESS SPACE TO RESTART",
+            950.0f,
+            26.0f,
+            Color(1.0f, 1.0f, 1.0f));
     }
     else if (_currentState == GameState::Ready)
     {
-        renderer.DrawCenteredString(L"PRESS SPACE TO START", playCenterY, 32.0f, Color(1.0f, 1.0f, 1.0f));
+        renderer.DrawCenteredString(L"SUPER DODGE", 360.0f, 64.0f, Color(0.25f, 0.75f, 1.0f));
+        renderer.DrawCenteredString(L"PRESS SPACE TO START", 455.0f, 32.0f, Color(1.0f, 1.0f, 1.0f));
+        renderer.DrawCenteredString(L"MOVE  WASD / ARROW", 530.0f, 22.0f, Color(0.85f, 0.85f, 0.85f));
+        renderer.DrawCenteredString(L"FOCUS  SHIFT     BOMB  X", 565.0f, 22.0f, Color(0.85f, 0.85f, 0.85f));
+        renderer.DrawCenteredString(L"COLLECT 3 STARS TO GAIN 1 LIFE", 600.0f, 20.0f, Color(1.0f, 0.85f, 0.2f));
+        renderer.DrawCenteredString(L"GRAZE BOSS SHOTS TO CLEAR PHASES", 635.0f, 20.0f, Color(1.0f, 0.7f, 0.9f));
     }
 
     renderer.EndText();

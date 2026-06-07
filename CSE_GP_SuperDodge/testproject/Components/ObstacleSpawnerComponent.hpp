@@ -3,6 +3,7 @@
 #include <random>
 #include <chrono>
 #include <algorithm>
+#include <vector>
 
 #include "../Core/Component.hpp"
 #include "../Core/GameObject.hpp"
@@ -14,6 +15,7 @@
 #include "../Game/GameEnums.hpp"
 #include "../Game/ObstacleData.hpp"
 #include "../Game/ObjectPool.hpp"
+#include "../Game/PrefabFactory.hpp"
 
 #include "AIComponent.hpp"
 #include "ObstacleStatusComponent.hpp"
@@ -25,6 +27,7 @@ private:
     GameObject* _target = nullptr;
     GameConfig _config;
     ObjectPool _objectPool;
+    std::vector<GameObject*> _starPool;
 
     float _spawnTimer = 0.0f;
     float _currentSpawnInterval = 1.00f;
@@ -41,6 +44,7 @@ public:
         _randomEngine.seed(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
 
         _objectPool.Initialize(_world, _config, 150);
+        InitializeStarPool(20);
 
         Reset();
     }
@@ -54,6 +58,7 @@ public:
         _isSpawning = false;
 
         _objectPool.Reset();
+        ResetStars();
     }
 
     void StartSpawn()
@@ -64,6 +69,7 @@ public:
     void StopSpawn()
     {
         _isSpawning = false;
+        ResetStars();
     }
 
     void SetSpawnCountScale(float scale)
@@ -83,12 +89,63 @@ public:
         {
             _spawnTimer = 0.0f;
             SpawnObstacle();
+            TrySpawnStar();
         }
 
         IncreaseDifficulty(deltaTime);
     }
 
 private:
+    void InitializeStarPool(int capacity)
+    {
+        if (_world == nullptr)
+            return;
+
+        _starPool.reserve(capacity);
+        for (int i = 0; i < capacity; ++i)
+            _starPool.push_back(_world->AddObject(PrefabFactory::CreateStarItem()));
+    }
+
+    void ResetStars()
+    {
+        for (GameObject* star : _starPool)
+        {
+            if (star != nullptr)
+                star->SetActive(false);
+        }
+    }
+
+    void TrySpawnStar()
+    {
+        std::uniform_int_distribution<int> chanceDist(0, 99);
+        if (chanceDist(_randomEngine) >= 5)
+            return;
+
+        GameObject* availableStar = nullptr;
+        for (GameObject* star : _starPool)
+        {
+            if (star != nullptr && !star->IsActive())
+            {
+                availableStar = star;
+                break;
+            }
+        }
+
+        if (availableStar == nullptr)
+            return;
+
+        const float margin = 30.0f;
+        std::uniform_real_distribution<float> xDist(
+            margin,
+            static_cast<float>(PlayAreaWidth) - margin);
+        std::uniform_real_distribution<float> yDist(
+            margin,
+            static_cast<float>(PlayAreaHeight) - margin);
+
+        availableStar->SetPosition(Vector2(xDist(_randomEngine), yDist(_randomEngine)));
+        availableStar->SetActive(true);
+    }
+
     void SpawnObstacle()
     {
         std::uniform_real_distribution<float> xDist(0.0f, static_cast<float>(PlayAreaWidth));

@@ -25,15 +25,18 @@ public:
     void Render(Renderer& renderer) override
     {
         if (owner == nullptr) return;
-        
+
+        auto* status = owner->GetComponent<PlayerStatusComponent>();
+        if (status != nullptr && !status->IsVisible())
+            return;
+
         // 기본 기체 그리기
         const float radius = GetCircumscribedRadius(owner->GetSize());
         renderer.DrawCircle(owner->GetPosition(), radius, _color);
 
         // 피탄점 표시
         auto* controller = owner->GetComponent<PlayerControllerComponent>();
-        auto* status = owner->GetComponent<PlayerStatusComponent>();
-        
+
         if (controller != nullptr && status != nullptr && controller->IsFocusMode())
         {
             renderer.DrawCircle(
