@@ -75,7 +75,7 @@ public:
         _world = world;
         _target = target;
         _resources = resources;
-        _projectilePool.Initialize(world, config, _resources, 180);
+        _projectilePool.BossInitialize(world, config, _resources, 60);
 
         _bossObject = new GameObject(Vector2(PlayAreaWidth * 0.5f, 90.0f), Vector2(140.0f, 70.0f));
 

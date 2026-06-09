@@ -25,16 +25,18 @@ bool WindowContext::Initialize(HINSTANCE hInstance, int nCmdShow, WNDPROC wndPro
     wc.lpszClassName = _className;
 
     if (!RegisterClassExW(&wc))
-        return false;
+        return false; 
+
+    DWORD windowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
 
     RECT windowRect = { 0, 0, width, height };
-    AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+    AdjustWindowRect(&windowRect, windowStyle, FALSE);
 
     _hwnd = CreateWindowExW(
         0,
         _className,
         title,
-        WS_OVERLAPPEDWINDOW,
+        windowStyle,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         windowRect.right - windowRect.left,

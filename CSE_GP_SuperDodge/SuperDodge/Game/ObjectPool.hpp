@@ -24,20 +24,31 @@ private:
     GameRenderResources* _resources = nullptr;
 
 public:
-    void Initialize(GameWorld* world, const GameConfig& config, GameRenderResources* resources, int capacity)
+    void Initialize(GameWorld* world, const GameConfig& config, GameRenderResources* resources, int perTypeCount)
     {
         _world = world;
         _config = config;
         _resources = resources;
         _pool.clear();
 
-        int perTypeCount = std::max(1, capacity / 3);
-
         for (int i = 0; i < perTypeCount; ++i)
         {
             AddPooledObject(ObstacleType::Normal);
             AddPooledObject(ObstacleType::Fast);
             AddPooledObject(ObstacleType::Guided);
+        }
+    }
+
+    void BossInitialize(GameWorld* world, const GameConfig& config, GameRenderResources* resources, int capacity)
+    {
+        _world = world;
+        _config = config;
+        _resources = resources;
+        _pool.clear();
+
+        for (int i = 0; i < capacity; ++i)
+        {
+            AddPooledObject(ObstacleType::Normal);
         }
     }
 

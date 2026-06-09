@@ -45,7 +45,7 @@ public:
     {
         _randomEngine.seed(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
 
-        _objectPool.Initialize(_world, _config, _resources, 150);
+        _objectPool.Initialize(_world, _config, _resources, 50);
         InitializeStarPool(20);
 
         Reset();
