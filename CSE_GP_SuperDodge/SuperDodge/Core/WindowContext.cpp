@@ -27,7 +27,7 @@ bool WindowContext::Initialize(HINSTANCE hInstance, int nCmdShow, WNDPROC wndPro
     if (!RegisterClassExW(&wc))
         return false; 
 
-    DWORD windowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    DWORD windowStyle = WS_OVERLAPPEDWINDOW;
 
     RECT windowRect = { 0, 0, width, height };
     AdjustWindowRect(&windowRect, windowStyle, FALSE);

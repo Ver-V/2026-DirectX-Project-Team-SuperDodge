@@ -71,6 +71,18 @@ LRESULT CALLBACK GameLoop::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LP
             return 0;
         }
         break;
+    case WM_SIZING:
+        RECT* rect = reinterpret_cast<RECT*>(lParam);
+
+        constexpr float aspect = static_cast<float>(ScreenWidth) / ScreenHeight;
+
+        int width = rect->right - rect->left;
+        int height = static_cast<int>(width / aspect);
+
+        rect->bottom = rect->top + height;
+
+        return TRUE;
+    
     }
 
     return DefWindowProc(hwnd, message, wParam, lParam);
