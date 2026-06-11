@@ -65,6 +65,9 @@ public:
         _bombBonusScore = awardClearBonus
             ? (std::max)(0, remainingBombs) * BombBonusPerCount
             : 0;
+        _lifeBonusScore = awardClearBonus
+            ? (std::max)(0, remainingLives) * LifeBonusPerCount
+            : 0;
         _isFinalized = true;
 
         RegisterRankingScore(GetScore());

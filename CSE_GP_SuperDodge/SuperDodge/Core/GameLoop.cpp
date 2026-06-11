@@ -13,6 +13,8 @@ bool GameLoop::Initialize(HINSTANCE hInstance, int nCmdShow)
     if (!_window.Initialize(hInstance, nCmdShow, GameLoop::WindowProc, ScreenWidth, ScreenHeight, L"Dodge DX11"))
         return false;
 
+    _inputManager.SetWindowHandle(_window.GetHwnd());
+
     if (!_graphics.Initialize(_window.GetHwnd(), ScreenWidth, ScreenHeight))
     {
         MessageBoxW(_window.GetHwnd(), L"DirectX11 초기화에 실패했습니다.", L"Error", MB_OK | MB_ICONERROR);

@@ -44,6 +44,22 @@ namespace
         return DirectX::XMFLOAT4(color.r, color.g, color.b, color.a);
     }
 
+    std::wstring GetExecutableDirectory()
+    {
+        wchar_t modulePath[MAX_PATH] = {};
+        const DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+        if (length == 0 || length == MAX_PATH)
+            return L"";
+
+        std::wstring directory(modulePath, length);
+        const size_t separator = directory.find_last_of(L"\\/");
+        if (separator == std::wstring::npos)
+            return L"";
+
+        directory.resize(separator + 1);
+        return directory;
+    }
+
     std::vector<Vertex> CreateCircleVertices(int segmentCount, const Color& color)
     {
         std::vector<Vertex> vertices;
@@ -190,7 +206,9 @@ void GameManager::Update(float deltaTime)
             {
                 if (IsCircleOverlap(playerPos, GetCircumscribedRadius(playerSize), obj->GetPosition(), starItem->GetPickupRadius()))
                 {
-                    playerStatus->CollectStar();
+                    if (playerStatus->CollectStar())
+                        _scoreManager.AddScore(ScoreManager::LifeBonusPerCount);
+
                     obj->SetActive(false);
                 }
                 continue;
@@ -606,7 +624,11 @@ bool GameManager::LoadShapeShader(GraphicsContext* graphics, ShaderSet& shaderSe
     compileFlags |= D3DCOMPILE_DEBUG;
 #endif
 
-    HRESULT hr = D3DCompileFromFile(L"vs.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errorBlob);
+    const std::wstring shaderDirectory = GetExecutableDirectory();
+    const std::wstring vertexShaderPath = shaderDirectory + L"vs.hlsl";
+    const std::wstring pixelShaderPath = shaderDirectory + L"ps.hlsl";
+
+    HRESULT hr = D3DCompileFromFile(vertexShaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errorBlob);
     if (FAILED(hr))
     {
         OutputShaderError(errorBlob);
@@ -615,7 +637,7 @@ bool GameManager::LoadShapeShader(GraphicsContext* graphics, ShaderSet& shaderSe
         return false;
     }
 
-    hr = D3DCompileFromFile(L"ps.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errorBlob);
+    hr = D3DCompileFromFile(pixelShaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errorBlob);
     if (FAILED(hr))
     {
         OutputShaderError(errorBlob);

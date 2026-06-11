@@ -176,10 +176,14 @@
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="ps.hlsl">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>5.0</ShaderModel>
+      <EntryPointName>main</EntryPointName>
     </FxCompile>
     <FxCompile Include="vs.hlsl">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ShaderType>Vertex</ShaderType>
+      <ShaderModel>5.0</ShaderModel>
+      <EntryPointName>main</EntryPointName>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
@@ -188,6 +192,11 @@
     </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CopyRuntimeShaders" AfterTargets="Build">
+    <Copy SourceFiles="$(ProjectDir)vs.hlsl;$(ProjectDir)ps.hlsl"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

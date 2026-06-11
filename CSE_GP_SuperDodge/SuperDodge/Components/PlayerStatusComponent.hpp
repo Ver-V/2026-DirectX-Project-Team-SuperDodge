@@ -46,15 +46,20 @@ public:
         return true;
     }
 
-    void CollectStar()
+    bool CollectStar()
     {
         ++_collectedStars;
         if (_collectedStars < StarsPerLife)
-            return;
+            return false;
 
         _collectedStars = 0;
         if (_hp < MaxHp)
+        {
             ++_hp;
+            return false;
+        }
+
+        return true;
     }
 
     bool UseBomb()
